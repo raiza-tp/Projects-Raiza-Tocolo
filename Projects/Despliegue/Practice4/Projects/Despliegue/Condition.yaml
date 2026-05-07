@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Ejercicio 1 - VPC + Subnet publica + EC2 opcional con Conditions, Rules, Fn::Join, GetAZs y !GetAtt"
+Parameters:
+  CreateInstance:
+    Description: "Crear instancia EC2 (true/false)"
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  InstanceType:
+    Description: "Tipo de instancia permitido"
+    Type: String
+    Default: t3.micro
+  MyName:
+    Description: "Tu nombre para el Name tag"
+    Type: String
+    Default: "Saira"
+  KeyName:
+    Description: "KeyPair para SSH"
+    Type: AWS::EC2::KeyPair::KeyName
+  LatestAmiId:
+    Description: "AMI Amazon Linux 2 (SSM)"
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+Rules:
+  AllowedInstanceTypesRule:
+    Assertions:
+      - Assert:
+          Fn::Contains:
+            - - t3.micro
+              - t3.small
+              - t3.medium
+            - !Ref InstanceType
+        AssertDescription: "InstanceType debe ser: t3.micro, t3.small o t3.medium"
+Conditions:
+  CreateEC2: !Equals [!Ref CreateInstance, "true"]
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "vpc-ej1-${AWS::Region}"
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "igw-ej1-${AWS::Region}"
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.10.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "subnet-public-ej1-${AWS::Region}"
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "rtb-public-ej1-${AWS::Region}"
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  AssocPublicSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  WebSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "SG basica para SSH"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-ej1-${AWS::Region}"
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Condition: CreateEC2
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref WebSG
+      Tags:
+        # Name con Fn::Join (region + instanceId + mi nombre)
+        - Key: Name
+          Value:
+            Fn::Join:
+              - "-"
+              - - !Ref "AWS::Region"
+                - !Ref "AWS::StackName"
+                - !Ref MyName
+        # Tag VPCID (se obtiene usando !GetAtt sobre la VPC)
+        - Key: VPCID
+          Value: !GetAtt VPC.VpcId
+Outputs:
+  VpcId:
+    Value: !Ref VPC
+    Description: "VPC ID"
+  PublicSubnetId:
+    Value: !Ref PublicSubnet
+    Description: "Subnet publica"
+  InstanceId:
+    Condition: CreateEC2
+    Value: !Ref EC2Instance
+    Description: "ID de la instancia si esta creada"
