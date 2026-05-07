@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Práctica 4 - API Gateway + SNS + Lambda + DynamoDB'
+
+Parameters:
+  EmailSuscriptor:
+    Type: String
+    Description: Correo electrónico para recibir notificaciones SNS
+    Default: raitocpit@alu.edu.gva.es
+
+Resources:
+
+  #DYNAMODB
+  TablaMensajes:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Mensajes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # SNS
+  MiNotificacionTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: MiNotificacionTopic
+
+  SuscripcionEmail:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref MiNotificacionTopic
+      Protocol: email
+      Endpoint: !Ref EmailSuscriptor
+
+  # Funcion Lambda (usa LabRole de AWS Academy)
+  EnviarNotificacion:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: EnviarNotificacion
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::047847679706:role/LabRole
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref MiNotificacionTopic
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import datetime
+          import os
+
+          sns_client = boto3.client("sns")
+          dynamodb = boto3.resource('dynamodb')
+          table = dynamodb.Table('Mensajes')
+
+          def lambda_handler(event, context):
+              try:
+                  body = json.loads(event.get("body", "{}"))
+                  message = body.get("message", "Mensaje por defecto")
+                  subject = body.get("subject", "Notificación API")
+
+                  fecha = str(datetime.datetime.utcnow())
+
+                  # Guardar en DynamoDB
+                  table.put_item(
+                      Item={
+                          'id': fecha,
+                          'mensaje': message
+                      }
+                  )
+
+                  # Enviar mensaje a SNS
+                  response = sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Message=message,
+                      Subject=subject
+                  )
+
+                  return {
+                      "statusCode": 200,
+                      "body": json.dumps({
+                          "message": "Notificación enviada y guardada en DynamoDB",
+                          "SNS_Response": response
+                      })
+                  }
+
+              except Exception as e:
+                  return {
+                      "statusCode": 500,
+                      "body": json.dumps({"error": str(e)})
+                  }
+
+  # Permiso para que API Gateway invoque la función Lambda
+  PermisoAPIGateway:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EnviarNotificacion
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MiAPI}/*/*'
+
+  # API Gateway
+  MiAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: MiAPI
+      Description: API para enviar notificaciones via SNS y guardar en DynamoDB
+
+  RecursoNotificaciones:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref MiAPI
+      ParentId: !GetAtt MiAPI.RootResourceId
+      PathPart: notificaciones
+
+  MetodoPOST:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref MiAPI
+      ResourceId: !Ref RecursoNotificaciones
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EnviarNotificacion.Arn}/invocations'
+
+  DespliegueAPI:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: MetodoPOST
+    Properties:
+      RestApiId: !Ref MiAPI
+      StageName: dev
+
+# Salida esperada
+Outputs:
+  URLInvocacion:
+    Description: URL para invocar la API
+    Value: !Sub 'https://${MiAPI}.execute-api.${AWS::Region}.amazonaws.com/dev/notificaciones'
+
+  ARNTopicSNS:
+    Description: ARN del topic SNS
+    Value: !Ref MiNotificacionTopic
+
+  ARNTablaDB:
+    Description: ARN de la tabla DynamoDB
+    Value: !GetAtt TablaMensajes.Arn
