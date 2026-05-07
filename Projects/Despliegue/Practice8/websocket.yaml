@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Practice WebSocket con Lambda Functions'
+
+Resources:
+
+  # LAMBDA FUNCTIONS
+
+  OnConnectLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: onConnectLambda
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: arn:aws:iam::ACCOUNT_ID:role/LabRole
+      Code:
+        ZipFile: |
+          export const handler = async (event) => {
+            console.log("Cliente conectado:", event.requestContext.connectionId);
+            return { statusCode: 200 };
+          };
+
+  OnDisconnectLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: onDisconnectLambda
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: arn:aws:iam::ACCOUNT_ID:role/LabRole
+      Code:
+        ZipFile: |
+          export const handler = async (event) => {
+            console.log("Cliente desconectado:", event.requestContext.connectionId);
+            return { statusCode: 200 };
+          };
+
+  SendMessageLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sendMessageLambda
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: arn:aws:iam::ACCOUNT_ID:role/LabRole
+      Code:
+        ZipFile: |
+          import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+
+          const apiGateway = new ApiGatewayManagementApiClient({
+            endpoint: process.env.WEBSOCKET_ENDPOINT
+          });
+
+          export const handler = async (event) => {
+            try {
+              if (!event || !event.requestContext || !event.requestContext.connectionId) {
+                throw new Error("Evento inválido: falta connectionId en requestContext.");
+              }
+              const connectionId = event.requestContext.connectionId;
+              const body = JSON.parse(event.body || "{}");
+              console.log("Enviando mensaje a:", connectionId);
+              const command = new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({ message: body.message || "Mensaje predeterminado" })
+              });
+              await apiGateway.send(command);
+              console.log("Mensaje enviado correctamente.");
+              return { statusCode: 200, body: "Mensaje enviado." };
+            } catch (error) {
+              console.error("Error enviando mensaje:", error);
+              if (error.name === "GoneException") {
+                return { statusCode: 410, body: "La conexión ya está cerrada." };
+              }
+              if (error.name === "ForbiddenException") {
+                return { statusCode: 403, body: "Permisos insuficientes." };
+              }
+              return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            }
+          };
+      Environment:
+        Variables:
+          WEBSOCKET_ENDPOINT: !Sub
+            - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/production"
+            - ApiId: !Ref WebSocketApi
+
+  # API GATEWAY WEBSOCKET
+
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: websocket-api
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  # Integraciones
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations"
+        - LambdaArn: !GetAtt OnConnectLambda.Arn
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations"
+        - LambdaArn: !GetAtt OnDisconnectLambda.Arn
+
+  SendMessageIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations"
+        - LambdaArn: !GetAtt SendMessageLambda.Arn
+
+  # Rutas
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$connect"
+      Target: !Sub "integrations/${ConnectIntegration}"
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$disconnect"
+      Target: !Sub "integrations/${DisconnectIntegration}"
+
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "sendMessage"
+      Target: !Sub "integrations/${SendMessageIntegration}"
+
+  # Stage
+
+  ProductionStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: production
+      AutoDeploy: true
+
+  # Permisos para que API Gateway invoque las Lambdas
+
+  ConnectLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OnConnectLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+
+  DisconnectLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OnDisconnectLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+
+  SendMessageLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SendMessageLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+
+# OUTPUTS
+
+Outputs:
+  WebSocketURL:
+    Description: "URL WebSocket para conectarse con wscat"
+    Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/production"
+
+  HttpsEndpoint:
+    Description: "Endpoint HTTPS para sendMessageLambda"
+    Value: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/production"
