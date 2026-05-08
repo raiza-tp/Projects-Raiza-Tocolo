@@ -2,7 +2,7 @@
 <!--       MINIMAL BANNER      -->
 <!-- ========================= -->
 
-<h1 align="center">Raiza Tocolo – Systems Administrator & Cloud Computing </h1>
+<h1 align="center">Raiza Tocolo – Systems & Cloud Administrator </h1>
 
 <p align="center">
 <br>  
