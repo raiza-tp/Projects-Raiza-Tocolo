@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <input id="msg" placeholder="Mensaje..." />
+  <button onclick="enviar()">Enviar</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const ws = new WebSocket("wss://pzlqrfgsg8.execute-api.us-east-1.amazonaws.com/production");
+
+    ws.onopen = () => log("Conectado");
+
+    ws.onmessage = (msg) => {
+      log("Mensaje recibido: " + msg.data);
+    };
+
+    function enviar() {
+      const texto = document.getElementById("msg").value;
+      ws.send(JSON.stringify({
+        action: "sendMessage",
+        data: texto
+      }));
+    }
+
+    function log(msg) {
+      document.getElementById("log").textContent += msg + "\n";
+    }
+  </script>
+</body>
+</html>
