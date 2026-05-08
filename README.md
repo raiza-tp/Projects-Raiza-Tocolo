@@ -2,12 +2,11 @@
 <!--       MINIMAL BANNER      -->
 <!-- ========================= -->
 
-<h1 align="center">Raiza Tocolo – Cloud Computing & Systems Administration</h1>
+<h1 align="center">Raiza Tocolo – Systems Administrator & Cloud Computing </h1>
 
 <p align="center">
-Portfolio Profesional | Professional Portfolio  
 <br>  
-ASIR • AWS Cloud • Linux • Networking • DevOps
+Systems  • AWS Cloud • Linux • Networking • DevOps
 </p>
 
 ---
@@ -27,14 +26,7 @@ ASIR • AWS Cloud • Linux • Networking • DevOps
 
 ---
 
-# 🇪🇸 **Sobre mí (ES)**
-
-Soy **Técnica Superior en Administración de Sistemas Informáticos en Red (ASIR)** y actualmente curso el **Especialización en Cloud Computing con AWS**.  
-Mi trabajo se centra en infraestructura, redes, seguridad y automatización en entornos cloud y Linux.
-
----
-
-# 🇬🇧 **About Me (EN)**
+# **About Me (EN)**
 
 I am a **Systems and Network Administrator (ASIR)** currently completing a **Cloud Computing Specialization with AWS**.  
 My focus is on infrastructure, networking, security, and automation in both cloud and Linux environments.
@@ -151,5 +143,5 @@ AWS CLI, Python Boto3, Git & GitHub, Shell scripting
 
 ---
 
-<p align="center"><strong>Este portfolio seguirá creciendo con nuevos proyectos.  
+<p align="center"><strong> 
 This portfolio will continue growing with new projects.</strong></p>
