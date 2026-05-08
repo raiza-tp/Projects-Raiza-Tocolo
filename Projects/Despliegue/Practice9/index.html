@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat AWS</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 { color: #232f3e; }
+    label { font-weight: bold; }
+    input[type="text"] {
+      padding: 6px 10px;
+      margin: 4px 0 10px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 200px;
+    }
+    button {
+      background-color: #ff9900;
+      color: white;
+      border: none;
+      padding: 7px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background-color: #e68900; }
+    #messages {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 14px;
+      min-height: 150px;
+      background: #f9f9f9;
+    }
+    #messages p {
+      margin: 4px 0;
+      font-size: 14px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Chat AWS 🟠</h1>
+
+  <div>
+    <label>Usuario:</label>
+    <input id="user" type="text" placeholder="Tu nombre" /><br />
+    <label>Mensaje:</label>
+    <input id="text" type="text" placeholder="Escribe algo..." />
+    <button onclick="sendMessage()">Enviar</button>
+  </div>
+
+  <div id="messages"></div>
+
+  <script>
+    const API_BASE = "https://jmgnrb0wg5.execute-api.us-east-1.amazonaws.com/dev";
+
+    async function sendMessage() {
+      const user = document.getElementById("user").value;
+      const text = document.getElementById("text").value;
+
+      if (!user || !text) return alert("Usuario y mensaje son obligatorios");
+
+      const res = await fetch(`${API_BASE}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, text, room: "general" }),
+      });
+
+      const data = await res.json();
+      console.log("Enviado:", data);
+      document.getElementById("text").value = "";
+      loadMessages();
+    }
+
+    async function loadMessages() {
+      try {
+        const res = await fetch(`${API_BASE}/messages?room=general&limit=20`);
+        const data = await res.json();
+
+        const container = document.getElementById("messages");
+        container.innerHTML = "";
+
+        (data.messages || [])
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .forEach((msg) => {
+            const p = document.createElement("p");
+            const date = new Date(msg.timestamp).toLocaleTimeString();
+            p.textContent = `[${date}] ${msg.user}: ${msg.text}`;
+            container.appendChild(p);
+          });
+      } catch (e) {
+        console.error("Error cargando mensajes:", e);
+      }
+    }
+
+    setInterval(loadMessages, 5000);
+    loadMessages();
+  </script>
+</body>
+</html>
