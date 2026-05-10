@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SAM App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+    input { padding: 8px; margin: 5px; width: 200px; }
+    button { padding: 8px 16px; background: #ff9900; border: none; color: white; cursor: pointer; border-radius: 4px; }
+    button:hover { background: #e88a00; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #ff9900; color: white; }
+    #status { margin: 10px 0; color: green; }
+  </style>
+</head>
+<body>
+  <h1>🗄️ SAM App - DynamoDB</h1>
+  <h2>Añadir ítem</h2>
+  <input id="itemId" placeholder="ID" />
+  <input id="itemName" placeholder="Nombre" />
+  <button onclick="putItem()">Añadir</button>
+  <p id="status"></p>
+  <h2>Todos los ítems</h2>
+  <button onclick="getAllItems()">Cargar ítems</button>
+  <table>
+    <thead><tr><th>ID</th><th>Nombre</th></tr></thead>
+    <tbody id="itemsBody"></tbody>
+  </table>
+  <script>
+    const API = 'https://qp9idnezt7.execute-api.us-east-1.amazonaws.com/Prod';
+    async function getAllItems() {
+      const res = await fetch(API + '/');
+      const items = await res.json();
+      const tbody = document.getElementById('itemsBody');
+      tbody.innerHTML = items.map(i => `<tr><td>${i.id}</td><td>${i.name}</td></tr>`).join('');
+    }
+    async function putItem() {
+      const id = document.getElementById('itemId').value;
+      const name = document.getElementById('itemName').value;
+      const res = await fetch(API + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name })
+      });
+      const data = await res.json();
+      document.getElementById('status').textContent = data.message;
+      getAllItems();
+    }
+  </script>
+</body>
+</html>
